@@ -8,7 +8,7 @@
 
 Can a machine learning model predict which country a photo was taken in better than humans can? This project fine-tunes an EfficientNet-B0 convolutional neural network on ~500,000 street-view images from the [OpenStreetView-5M](https://huggingface.co/datasets/osv5m/osv5m) dataset, then statistically compares its accuracy against a five-person case study group using McNemar's test.
 
-**Key result:** The model achieves **64.7% accuracy** on 1,000 test images across 161 countries, significantly outperforming all human participants (8.7%–15.3% individually, 20.6% as a group oracle). All McNemar tests reject the null hypothesis at alpha = 0.05.
+**Key result:** The model achieves **64.7% accuracy** on 1,000 test images across 161 countries, significantly outperforming all human participants (8.7%–15.3% individually, 18.8% as a group oracle). All McNemar tests reject the null hypothesis at alpha = 0.05.
 
 ## Quick Start
 
@@ -91,8 +91,8 @@ McNemar's test compares paired binary outcomes (correct/incorrect) on the same i
 |--------|----------|---|
 | EfficientNet-B0 | **64.70%** | 1,000 |
 | Old model | 32.10% | 1,000 |
-| Group (any correct) | 20.60% | 1,000 |
-| Group (majority vote) | 12.70% | 1,000 |
+| Group (any correct) | 18.80% | 1,000 |
+| Group (majority vote) | 6.80% | 1,000 |
 | Heeseung (best individual) | 15.28% | 144 |
 | Random baseline | 0.62% | — |
 
