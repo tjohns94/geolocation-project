@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoGuess — Human vs. Model</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #252836;
+  --border: #2e3140;
+  --text: #e4e4e7;
+  --text-muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --correct: #22c55e;
+  --incorrect: #ef4444;
+  --model: #f59e0b;
+  --radius: 10px;
+  --font: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Screens ──────────────────────────────────────────────────────────────── */
+.screen { display: none; }
+.screen.active { display: flex; }
+
+/* ── Login Screen ─────────────────────────────────────────────────────────── */
+#login-screen {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 24px;
+  padding: 24px;
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 440px;
+  width: 100%;
+  text-align: center;
+}
+
+.login-card h1 {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-card p {
+  color: var(--text-muted);
+  margin-bottom: 32px;
+  line-height: 1.5;
+  font-size: 15px;
+}
+
+.input-group {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 16px;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+  border-color: var(--accent);
+}
+
+.input-group input::placeholder { color: var(--text-muted); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 28px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.2s;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  width: 100%;
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Game Screen ──────────────────────────────────────────────────────────── */
+#game-screen {
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.game-header .logo {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-hover);
+}
+
+.stats-bar {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+}
+
+.stats-bar .stat {
+  color: var(--text-muted);
+}
+
+.stats-bar .stat strong {
+  color: var(--text);
+}
+
+.game-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left: Image */
+.image-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.image-panel img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-panel .loading-spinner {
+  position: absolute;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+/* Right: Controls */
+.controls-panel {
+  width: 480px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+
+.search-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-section label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.search-wrapper {
+  position: relative;
+}
+
+#country-search {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 15px;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+#country-search:focus { border-color: var(--accent); }
+#country-search::placeholder { color: var(--text-muted); }
+
+.autocomplete-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  display: none;
+}
+
+.autocomplete-list.visible { display: block; }
+
+.autocomplete-item {
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.highlighted {
+  background: var(--surface-hover);
+}
+
+.selected-country {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--accent);
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-align: center;
+  display: none;
+  font-size: 15px;
+  color: white;
+}
+
+.selected-country.visible { display: block; }
+
+/* Map */
+.map-section {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Submit bar */
+.submit-bar {
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.submit-bar .btn { width: 100%; }
+
+/* ── Result Overlay ───────────────────────────────────────────────────────── */
+.result-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 24px;
+}
+
+.result-overlay.visible { display: flex; }
+
+.result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+}
+
+.result-card h2 {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.result-card .correct-answer {
+  color: var(--text-muted);
+  font-size: 15px;
+  margin-bottom: 28px;
+}
+
+.result-card .correct-answer strong {
+  color: var(--text);
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.result-row .label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.result-row .value { font-weight: 600; }
+.result-row .value.correct { color: var(--correct); }
+.result-row .value.incorrect { color: var(--incorrect); }
+
+.result-stats {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.result-stats strong { color: var(--text); }
+
+.result-card .btn {
+  margin-top: 24px;
+  width: 100%;
+}
+
+/* ── Done Screen ──────────────────────────────────────────────────────────── */
+#done-screen {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 24px;
+  padding: 24px;
+}
+
+.done-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+}
+
+.done-card h2 { font-size: 28px; margin-bottom: 16px; }
+.done-card p { color: var(--text-muted); line-height: 1.6; }
+
+.leaderboard {
+  margin-top: 24px;
+  text-align: left;
+}
+
+.leaderboard table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.leaderboard th, .leaderboard td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.leaderboard th {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.leaderboard tr.model-row { color: var(--model); }
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Leaflet overrides ────────────────────────────────────────────────────── */
+.leaflet-container { background: var(--bg) !important; }
+</style>
+</head>
+<body>
+
+<!-- ════════ LOGIN SCREEN ════════ -->
+<div id="login-screen" class="screen active">
+  <div class="login-card">
+    <h1>GeoGuess</h1>
+    <p>Can you beat the model? View street-view photos and guess the country.
+       Your guesses will be compared against our geolocation AI.</p>
+    <div class="input-group">
+      <input type="text" id="username-input" placeholder="Enter your name"
+             autocomplete="off" maxlength="40">
+    </div>
+    <button class="btn btn-primary" id="start-btn" disabled>Start Guessing</button>
+  </div>
+</div>
+
+<!-- ════════ GAME SCREEN ════════ -->
+<div id="game-screen" class="screen">
+  <div class="game-header">
+    <div class="logo">GeoGuess</div>
+    <div class="stats-bar">
+      <div class="stat">Player: <strong id="hdr-username"></strong></div>
+      <div class="stat">Score: <strong id="hdr-score">0/0</strong></div>
+      <div class="stat">Accuracy: <strong id="hdr-accuracy">—</strong></div>
+    </div>
+  </div>
+  <div class="game-body">
+    <div class="image-panel">
+      <span class="loading-spinner" id="img-loading">Loading image...</span>
+      <img id="game-image" alt="Street view" style="display:none;" />
+    </div>
+    <div class="controls-panel">
+      <div class="search-section">
+        <label>Select a country</label>
+        <div class="search-wrapper">
+          <input type="text" id="country-search" placeholder="Type to search..."
+                 autocomplete="off" />
+          <div class="autocomplete-list" id="autocomplete-list"></div>
+        </div>
+        <div class="selected-country" id="selected-display"></div>
+      </div>
+      <div class="map-section">
+        <div id="map"></div>
+      </div>
+      <div class="submit-bar">
+        <button class="btn btn-primary" id="submit-btn" disabled>Submit Guess</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ RESULT OVERLAY ════════ -->
+<div class="result-overlay" id="result-overlay">
+  <div class="result-card">
+    <h2 id="result-title">Result</h2>
+    <p class="correct-answer">Correct answer: <strong id="result-correct"></strong></p>
+    <div class="result-row">
+      <span class="label">Your guess</span>
+      <span class="value" id="result-human"></span>
+    </div>
+    <div class="result-row">
+      <span class="label">Model's guess</span>
+      <span class="value" id="result-model"></span>
+    </div>
+    <div class="result-stats">
+      Your running accuracy: <strong id="result-stats-text"></strong>
+    </div>
+    <button class="btn btn-primary" id="next-btn">Next Image</button>
+  </div>
+</div>
+
+<!-- ════════ DONE SCREEN ════════ -->
+<div id="done-screen" class="screen">
+  <div class="done-card">
+    <h2>All Done!</h2>
+    <p>You've guessed every available image. Thanks for participating!</p>
+    <div class="leaderboard" id="leaderboard"></div>
+  </div>
+</div>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────────── -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<script>
+(function() {
+  "use strict";
+
+  // ── State ───────────────────────────────────────────────────────────────
+  let username = "";
+  let currentImageId = null;
+  let selectedCountry = null;
+  let countries = [];        // list of valid country names
+  let geoLayer = null;       // Leaflet GeoJSON layer
+  let map = null;
+  let highlightedItem = -1;  // autocomplete highlight index
+
+  // ISO 3166-1 numeric → country name mapping for GeoJSON labels
+  // (world-atlas uses numeric IDs)
+  const ISO_NUMERIC = {"004":"Afghanistan","008":"Albania","012":"Algeria","016":"American Samoa","020":"Andorra","024":"Angola","028":"Antigua and Barbuda","031":"Azerbaijan","032":"Argentina","036":"Australia","040":"Austria","044":"Bahamas","048":"Bahrain","050":"Bangladesh","051":"Armenia","052":"Barbados","056":"Belgium","060":"Bermuda","064":"Bhutan","068":"Bolivia","070":"Bosnia and Herzegovina","072":"Botswana","076":"Brazil","084":"Belize","090":"Solomon Islands","092":"British Virgin Islands","096":"Brunei","100":"Bulgaria","104":"Myanmar","108":"Burundi","112":"Belarus","116":"Cambodia","120":"Cameroon","124":"Canada","132":"Cape Verde","140":"Central African Republic","144":"Sri Lanka","148":"Chad","152":"Chile","156":"China","158":"Taiwan","170":"Colombia","174":"Comoros","178":"Republic of the Congo","180":"Democratic Republic of the Congo","184":"Cook Islands","188":"Costa Rica","191":"Croatia","192":"Cuba","196":"Cyprus","203":"Czechia","204":"Benin","208":"Denmark","212":"Dominica","214":"Dominican Republic","218":"Ecuador","222":"El Salvador","226":"Equatorial Guinea","231":"Ethiopia","232":"Eritrea","233":"Estonia","234":"Faroe Islands","238":"Falkland Islands","242":"Fiji","246":"Finland","250":"France","254":"French Guiana","258":"French Polynesia","260":"French Southern Territories","262":"Djibouti","266":"Gabon","268":"Georgia","270":"Gambia","275":"Palestine","276":"Germany","288":"Ghana","292":"Gibraltar","296":"Kiribati","300":"Greece","304":"Greenland","308":"Grenada","312":"Guadeloupe","316":"Guam","320":"Guatemala","324":"Guinea","328":"Guyana","332":"Haiti","340":"Honduras","344":"Hong Kong","348":"Hungary","352":"Iceland","356":"India","360":"Indonesia","364":"Iran","368":"Iraq","372":"Ireland","376":"Israel","380":"Italy","384":"Ivory Coast","388":"Jamaica","392":"Japan","398":"Kazakhstan","400":"Jordan","404":"Kenya","408":"North Korea","410":"South Korea","414":"Kuwait","417":"Kyrgyzstan","418":"Laos","422":"Lebanon","426":"Lesotho","428":"Latvia","430":"Liberia","434":"Libya","438":"Liechtenstein","440":"Lithuania","442":"Luxembourg","446":"Macao","450":"Madagascar","454":"Malawi","458":"Malaysia","462":"Maldives","466":"Mali","470":"Malta","474":"Martinique","478":"Mauritania","480":"Mauritius","484":"Mexico","492":"Monaco","496":"Mongolia","498":"Moldova","499":"Montenegro","504":"Morocco","508":"Mozambique","512":"Oman","516":"Namibia","520":"Nauru","524":"Nepal","528":"Netherlands","531":"Curacao","533":"Aruba","540":"New Caledonia","548":"Vanuatu","554":"New Zealand","558":"Nicaragua","562":"Niger","566":"Nigeria","570":"Niue","574":"Norfolk Island","578":"Norway","580":"Northern Mariana Islands","583":"Micronesia","584":"Marshall Islands","585":"Palau","586":"Pakistan","591":"Panama","598":"Papua New Guinea","600":"Paraguay","604":"Peru","608":"Philippines","612":"Pitcairn Islands","616":"Poland","620":"Portugal","624":"Guinea-Bissau","626":"East Timor","630":"Puerto Rico","634":"Qatar","638":"Reunion","642":"Romania","643":"Russia","646":"Rwanda","652":"Saint Barthelemy","654":"Saint Helena","659":"Saint Kitts and Nevis","660":"Anguilla","662":"Saint Lucia","663":"Saint Martin","666":"Saint Pierre and Miquelon","670":"Saint Vincent and the Grenadines","674":"San Marino","678":"Sao Tome and Principe","682":"Saudi Arabia","686":"Senegal","688":"Serbia","690":"Seychelles","694":"Sierra Leone","702":"Singapore","703":"Slovakia","704":"Vietnam","705":"Slovenia","706":"Somalia","710":"South Africa","716":"Zimbabwe","720":"South Yemen","724":"Spain","728":"South Sudan","729":"Sudan","732":"Western Sahara","740":"Suriname","744":"Svalbard","748":"Eswatini","752":"Sweden","756":"Switzerland","760":"Syria","762":"Tajikistan","764":"Thailand","768":"Togo","772":"Tokelau","776":"Tonga","780":"Trinidad and Tobago","784":"United Arab Emirates","788":"Tunisia","792":"Turkey","795":"Turkmenistan","796":"Turks and Caicos Islands","798":"Tuvalu","800":"Uganda","804":"Ukraine","807":"North Macedonia","818":"Egypt","826":"United Kingdom","834":"Tanzania","840":"United States","850":"US Virgin Islands","854":"Burkina Faso","858":"Uruguay","860":"Uzbekistan","862":"Venezuela","876":"Wallis and Futuna","882":"Samoa","887":"Yemen","894":"Zambia"};
+
+  // Full name → ISO 3166-1 alpha-2 code mapping
+  const NAME_TO_ISO2 = {"Afghanistan":"AF","Albania":"AL","Algeria":"DZ","American Samoa":"AS","Andorra":"AD","Angola":"AO","Antigua and Barbuda":"AG","Azerbaijan":"AZ","Argentina":"AR","Australia":"AU","Austria":"AT","Bahamas":"BS","Bahrain":"BH","Bangladesh":"BD","Armenia":"AM","Barbados":"BB","Belgium":"BE","Bermuda":"BM","Bhutan":"BT","Bolivia":"BO","Bosnia and Herzegovina":"BA","Botswana":"BW","Brazil":"BR","Belize":"BZ","Solomon Islands":"SB","British Virgin Islands":"VG","Brunei":"BN","Bulgaria":"BG","Myanmar":"MM","Burundi":"BI","Belarus":"BY","Cambodia":"KH","Cameroon":"CM","Canada":"CA","Cape Verde":"CV","Central African Republic":"CF","Sri Lanka":"LK","Chad":"TD","Chile":"CL","China":"CN","Taiwan":"TW","Colombia":"CO","Comoros":"KM","Republic of the Congo":"CG","Democratic Republic of the Congo":"CD","Cook Islands":"CK","Costa Rica":"CR","Croatia":"HR","Cuba":"CU","Cyprus":"CY","Czechia":"CZ","Benin":"BJ","Denmark":"DK","Dominica":"DM","Dominican Republic":"DO","Ecuador":"EC","El Salvador":"SV","Equatorial Guinea":"GQ","Ethiopia":"ET","Eritrea":"ER","Estonia":"EE","Faroe Islands":"FO","Falkland Islands":"FK","Fiji":"FJ","Finland":"FI","France":"FR","French Guiana":"GF","French Polynesia":"PF","French Southern Territories":"TF","Djibouti":"DJ","Gabon":"GA","Georgia":"GE","Gambia":"GM","Palestine":"PS","Germany":"DE","Ghana":"GH","Gibraltar":"GI","Kiribati":"KI","Greece":"GR","Greenland":"GL","Grenada":"GD","Guadeloupe":"GP","Guam":"GU","Guatemala":"GT","Guinea":"GN","Guyana":"GY","Haiti":"HT","Honduras":"HN","Hong Kong":"HK","Hungary":"HU","Iceland":"IS","India":"IN","Indonesia":"ID","Iran":"IR","Iraq":"IQ","Ireland":"IE","Israel":"IL","Italy":"IT","Ivory Coast":"CI","Jamaica":"JM","Japan":"JP","Kazakhstan":"KZ","Jordan":"JO","Kenya":"KE","North Korea":"KP","South Korea":"KR","Kuwait":"KW","Kyrgyzstan":"KG","Laos":"LA","Lebanon":"LB","Lesotho":"LS","Latvia":"LV","Liberia":"LR","Libya":"LY","Liechtenstein":"LI","Lithuania":"LT","Luxembourg":"LU","Macao":"MO","Madagascar":"MG","Malawi":"MW","Malaysia":"MY","Maldives":"MV","Mali":"ML","Malta":"MT","Martinique":"MQ","Mauritania":"MR","Mauritius":"MU","Mexico":"MX","Monaco":"MC","Mongolia":"MN","Moldova":"MD","Montenegro":"ME","Morocco":"MA","Mozambique":"MZ","Oman":"OM","Namibia":"NA","Nauru":"NR","Nepal":"NP","Netherlands":"NL","Curacao":"CW","Aruba":"AW","New Caledonia":"NC","Vanuatu":"VU","New Zealand":"NZ","Nicaragua":"NI","Niger":"NE","Nigeria":"NG","Niue":"NU","Norfolk Island":"NF","Norway":"NO","Northern Mariana Islands":"MP","Micronesia":"FM","Marshall Islands":"MH","Palau":"PW","Pakistan":"PK","Panama":"PA","Papua New Guinea":"PG","Paraguay":"PY","Peru":"PE","Philippines":"PH","Pitcairn Islands":"PN","Poland":"PL","Portugal":"PT","Guinea-Bissau":"GW","East Timor":"TL","Puerto Rico":"PR","Qatar":"QA","Reunion":"RE","Romania":"RO","Russia":"RU","Rwanda":"RW","Saint Barthelemy":"BL","Saint Helena":"SH","Saint Kitts and Nevis":"KN","Anguilla":"AI","Saint Lucia":"LC","Saint Martin":"MF","Saint Pierre and Miquelon":"PM","Saint Vincent and the Grenadines":"VC","San Marino":"SM","Sao Tome and Principe":"ST","Saudi Arabia":"SA","Senegal":"SN","Serbia":"RS","Seychelles":"SC","Sierra Leone":"SL","Singapore":"SG","Slovakia":"SK","Vietnam":"VN","Slovenia":"SI","Somalia":"SO","South Africa":"ZA","Zimbabwe":"ZW","Spain":"ES","South Sudan":"SS","Sudan":"SD","Western Sahara":"EH","Suriname":"SR","Svalbard":"SJ","Eswatini":"SZ","Sweden":"SE","Switzerland":"CH","Syria":"SY","Tajikistan":"TJ","Thailand":"TH","Togo":"TG","Tokelau":"TK","Tonga":"TO","Trinidad and Tobago":"TT","United Arab Emirates":"AE","Tunisia":"TN","Turkey":"TR","Turkmenistan":"TM","Turks and Caicos Islands":"TC","Tuvalu":"TV","Uganda":"UG","Ukraine":"UA","North Macedonia":"MK","Egypt":"EG","United Kingdom":"GB","Tanzania":"TZ","United States":"US","US Virgin Islands":"VI","Burkina Faso":"BF","Uruguay":"UY","Uzbekistan":"UZ","Venezuela":"VE","Wallis and Futuna":"WF","Samoa":"WS","Yemen":"YE","Zambia":"ZM","Côte d'Ivoire":"CI","Czech Republic":"CZ"};
+
+  // Country aliases: alternative names/spellings → ISO2 code
+  // Users can type any of these and it resolves to the correct country
+  const COUNTRY_ALIASES = {
+    // Common short names / colloquial
+    "america":"US","usa":"US","united states of america":"US","the us":"US","the states":"US",
+    "uk":"GB","britain":"GB","great britain":"GB","england":"GB",
+    "korea":"KR","south korea":"KR","republic of korea":"KR","korea, south":"KR","korea south":"KR",
+    "north korea":"KP","dprk":"KP","korea, north":"KP","korea north":"KP",
+    "czech republic":"CZ","czechia":"CZ",
+    "uae":"AE","emirates":"AE",
+    "holland":"NL","the netherlands":"NL",
+    "ivory coast":"CI","cote d'ivoire":"CI","côte d'ivoire":"CI",
+    "burma":"MM","myanmar":"MM",
+    "persia":"IR",
+    "siam":"TH",
+    "taiwan":"TW","chinese taipei":"TW","roc":"TW",
+    "hong kong":"HK",
+    "macao":"MO","macau":"MO",
+    "palestine":"PS","west bank":"PS","gaza":"PS",
+    "congo":"CD","drc":"CD","dr congo":"CD","democratic republic of congo":"CD","democratic republic of the congo":"CD",
+    "republic of congo":"CG","congo-brazzaville":"CG","congo brazzaville":"CG",
+    "republic of the congo":"CG",
+    "east timor":"TL","timor-leste":"TL","timor leste":"TL",
+    "eswatini":"SZ","swaziland":"SZ",
+    "cabo verde":"CV","cape verde":"CV",
+    "the gambia":"GM","gambia":"GM",
+    "the bahamas":"BS","bahamas":"BS",
+    "trinidad":"TT","trinidad & tobago":"TT","trinidad and tobago":"TT",
+    "bosnia":"BA","bosnia & herzegovina":"BA","bosnia-herzegovina":"BA",
+    "antigua":"AG","antigua & barbuda":"AG",
+    "st lucia":"LC","saint lucia":"LC",
+    "st vincent":"VC","saint vincent":"VC","st vincent and the grenadines":"VC",
+    "st kitts":"KN","saint kitts":"KN","st kitts and nevis":"KN",
+    "sao tome":"ST","são tomé":"ST","sao tome and principe":"ST",
+    "guinea bissau":"GW","guinea-bissau":"GW",
+    "papua new guinea":"PG","png":"PG",
+    "central african republic":"CF","car":"CF",
+    "equatorial guinea":"GQ",
+    "solomon islands":"SB",
+    "marshall islands":"MH",
+    "south sudan":"SS",
+    "north macedonia":"MK","macedonia":"MK","fyrom":"MK",
+    "saudi":"SA","ksa":"SA","saudi arabia":"SA",
+    "new zealand":"NZ","nz":"NZ","aotearoa":"NZ",
+    "south africa":"ZA","rsa":"ZA",
+    "philippines":"PH",
+    "russia":"RU","russian federation":"RU",
+    "china":"CN","prc":"CN","peoples republic of china":"CN",
+    "japan":"JP",
+    "germany":"DE",
+    "france":"FR",
+    "italy":"IT",
+    "spain":"ES",
+    "portugal":"PT",
+    "brazil":"BR",
+    "mexico":"MX",
+    "canada":"CA",
+    "australia":"AU","oz":"AU",
+    "india":"IN",
+    "pakistan":"PK",
+    "bangladesh":"BD",
+    "sri lanka":"LK","ceylon":"LK",
+    "nepal":"NP",
+    "afghanistan":"AF",
+    "iraq":"IQ",
+    "syria":"SY",
+    "lebanon":"LB",
+    "jordan":"JO",
+    "israel":"IL",
+    "egypt":"EG",
+    "libya":"LY",
+    "tunisia":"TN",
+    "algeria":"DZ",
+    "morocco":"MA",
+    "sudan":"SD",
+    "ethiopia":"ET",
+    "kenya":"KE",
+    "tanzania":"TZ",
+    "uganda":"UG",
+    "nigeria":"NG",
+    "ghana":"GH",
+    "senegal":"SN",
+    "cameroon":"CM",
+    "mozambique":"MZ",
+    "madagascar":"MG",
+    "zimbabwe":"ZW",
+    "zambia":"ZM",
+    "namibia":"NA",
+    "botswana":"BW",
+    "turkiye":"TR","türkiye":"TR","turkey":"TR",
+    "georgia":"GE",
+    "ukraine":"UA",
+    "poland":"PL",
+    "romania":"RO",
+    "hungary":"HU",
+    "greece":"GR",
+    "sweden":"SE",
+    "norway":"NO",
+    "denmark":"DK",
+    "finland":"FI",
+    "iceland":"IS",
+    "ireland":"IE",
+    "scotland":"GB","wales":"GB",
+    "switzerland":"CH",
+    "belgium":"BE",
+    "austria":"AT",
+    "croatia":"HR",
+    "serbia":"RS",
+    "slovenia":"SI",
+    "slovakia":"SK",
+    "bulgaria":"BG",
+    "albania":"AL",
+    "montenegro":"ME",
+    "moldova":"MD",
+    "latvia":"LV",
+    "lithuania":"LT",
+    "estonia":"EE",
+    "belarus":"BY",
+    "colombia":"CO",
+    "argentina":"AR",
+    "chile":"CL",
+    "peru":"PE",
+    "venezuela":"VE",
+    "ecuador":"EC",
+    "bolivia":"BO",
+    "paraguay":"PY",
+    "uruguay":"UY",
+    "costa rica":"CR",
+    "panama":"PA",
+    "cuba":"CU",
+    "jamaica":"JM",
+    "haiti":"HT",
+    "dominican republic":"DO",
+    "guatemala":"GT",
+    "honduras":"HN",
+    "el salvador":"SV",
+    "nicaragua":"NI",
+    "thailand":"TH",
+    "vietnam":"VN","viet nam":"VN",
+    "cambodia":"KH",
+    "laos":"LA",
+    "malaysia":"MY",
+    "singapore":"SG",
+    "indonesia":"ID",
+    "brunei":"BN",
+    "mongolia":"MN",
+    "kazakhstan":"KZ",
+    "uzbekistan":"UZ",
+    "turkmenistan":"TM",
+    "kyrgyzstan":"KG",
+    "tajikistan":"TJ",
+  };
+
+  // Resolve any alias to its ISO2 code (case-insensitive)
+  function resolveAlias(input) {
+    const lower = input.trim().toLowerCase();
+    // Direct code match
+    if (countries.includes(input.toUpperCase())) return input.toUpperCase();
+    // Alias lookup
+    if (COUNTRY_ALIASES[lower]) return COUNTRY_ALIASES[lower];
+    return null;
+  }
+
+  // ── DOM references ──────────────────────────────────────────────────────
+  const $id = id => document.getElementById(id);
+  const loginScreen = $id("login-screen");
+  const gameScreen  = $id("game-screen");
+  const doneScreen  = $id("done-screen");
+  const resultOverlay = $id("result-overlay");
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  function showScreen(screen) {
+    [loginScreen, gameScreen, doneScreen].forEach(s => s.classList.remove("active"));
+    screen.classList.add("active");
+  }
+
+  function findBestCountryMatch(geoName) {
+    // Direct lookup in name→ISO2 mapping
+    if (NAME_TO_ISO2[geoName]) {
+      const code = NAME_TO_ISO2[geoName];
+      if (countries.includes(code)) return code;
+    }
+    // Try exact match (in case countries list uses full names)
+    if (countries.includes(geoName)) return geoName;
+    // Case-insensitive lookup in mapping
+    const lowerGeo = geoName.toLowerCase();
+    for (const [name, code] of Object.entries(NAME_TO_ISO2)) {
+      if (name.toLowerCase() === lowerGeo && countries.includes(code)) return code;
+    }
+    return null;
+  }
+
+  // ── Autocomplete ────────────────────────────────────────────────────────
+  const searchInput = $id("country-search");
+  const acList = $id("autocomplete-list");
+
+  // Build reverse mapping: ISO2 code → full name for display
+  const ISO2_TO_NAME = {};
+  for (const [name, code] of Object.entries(NAME_TO_ISO2)) {
+    if (!ISO2_TO_NAME[code]) ISO2_TO_NAME[code] = name;
+  }
+
+  function getDisplayName(code) {
+    return ISO2_TO_NAME[code] || code;
+  }
+
+  function updateAutocomplete() {
+    const query = searchInput.value.trim().toLowerCase();
+    acList.innerHTML = "";
+    highlightedItem = -1;
+
+    if (!query) {
+      acList.classList.remove("visible");
+      return;
+    }
+
+    // Score matches: search code, full name, and aliases
+    const seen = new Set();
+    const scored = [];
+
+    // First check countries list
+    countries.forEach(code => {
+      const cl = code.toLowerCase();
+      const fullName = getDisplayName(code).toLowerCase();
+      let score = 0;
+      if (cl === query) score = 4;
+      else if (cl.startsWith(query)) score = 3;
+      else if (fullName.startsWith(query)) score = 2;
+      else if (fullName.includes(query)) score = 1;
+      if (score > 0 && !seen.has(code)) {
+        seen.add(code);
+        scored.push({ code, score });
+      }
+    });
+
+    // Then check aliases
+    for (const [alias, code] of Object.entries(COUNTRY_ALIASES)) {
+      if (!countries.includes(code) || seen.has(code)) continue;
+      if (alias.startsWith(query) || alias.includes(query)) {
+        seen.add(code);
+        scored.push({ code, score: alias.startsWith(query) ? 2 : 1 });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    const topResults = scored.slice(0, 8);
+
+    if (topResults.length === 0) {
+      acList.classList.remove("visible");
+      return;
+    }
+
+    topResults.forEach((item, idx) => {
+      const div = document.createElement("div");
+      div.className = "autocomplete-item";
+      div.dataset.code = item.code;
+      div.textContent = getDisplayName(item.code);
+      div.addEventListener("mousedown", e => {
+        e.preventDefault();
+        selectCountryByName(item.code);
+      });
+      acList.appendChild(div);
+    });
+
+    acList.classList.add("visible");
+  }
+
+  searchInput.addEventListener("input", updateAutocomplete);
+  searchInput.addEventListener("focus", updateAutocomplete);
+  searchInput.addEventListener("blur", () => {
+    setTimeout(() => acList.classList.remove("visible"), 150);
+  });
+
+  searchInput.addEventListener("keydown", e => {
+    const items = acList.querySelectorAll(".autocomplete-item");
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      highlightedItem = Math.min(highlightedItem + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle("highlighted", i === highlightedItem));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      highlightedItem = Math.max(highlightedItem - 1, 0);
+      items.forEach((el, i) => el.classList.toggle("highlighted", i === highlightedItem));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (highlightedItem >= 0 && items[highlightedItem]) {
+        selectCountryByName(items[highlightedItem].dataset.code);
+      }
+    }
+  });
+
+  // ── Country Selection ───────────────────────────────────────────────────
+  function selectCountryByName(code) {
+    selectedCountry = code;
+    searchInput.value = getDisplayName(code);
+    acList.classList.remove("visible");
+
+    const display = $id("selected-display");
+    display.textContent = getDisplayName(code);
+    display.classList.add("visible");
+    $id("submit-btn").disabled = false;
+
+    // Highlight on map
+    if (geoLayer) {
+      geoLayer.eachLayer(layer => {
+        const layerCode = layer.feature.properties._matchedName;
+        if (layerCode === code) {
+          layer.setStyle({ fillColor: "#6366f1", fillOpacity: 0.5, weight: 2, color: "#818cf8" });
+        } else {
+          layer.setStyle(defaultStyle(layer.feature));
+        }
+      });
+    }
+  }
+
+  function clearSelection() {
+    selectedCountry = null;
+    searchInput.value = "";
+    $id("selected-display").classList.remove("visible");
+    $id("submit-btn").disabled = true;
+    if (geoLayer) {
+      geoLayer.eachLayer(layer => layer.setStyle(defaultStyle(layer.feature)));
+    }
+  }
+
+  // ── Map Setup ───────────────────────────────────────────────────────────
+  function defaultStyle() {
+    return {
+      fillColor: "transparent",
+      fillOpacity: 0,
+      weight: 0.8,
+      color: "#3f4257",
+      opacity: 0.6,
+    };
+  }
+
+  function highlightStyle() {
+    return {
+      fillColor: "#6366f1",
+      fillOpacity: 0.25,
+      weight: 1.5,
+      color: "#818cf8",
+      opacity: 0.8,
+    };
+  }
+
+  function initMap() {
+    map = L.map("map", {
+      center: [20, 0],
+      zoom: 2,
+      minZoom: 2,
+      maxZoom: 6,
+      zoomControl: true,
+      attributionControl: false,
+      worldCopyJump: true,
+    });
+
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
+      subdomains: "abcd",
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Load country boundaries
+    fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+      .then(r => r.json())
+      .then(world => {
+        const geojson = topojson.feature(world, world.objects.countries);
+
+        // Attach country names from ISO mapping
+        geojson.features.forEach(f => {
+          const name = ISO_NUMERIC[f.id] || "Unknown";
+          f.properties.name = name;
+          f.properties._matchedName = findBestCountryMatch(name);
+        });
+
+        geoLayer = L.geoJSON(geojson, {
+          style: defaultStyle,
+          onEachFeature: (feature, layer) => {
+            const matchedName = feature.properties._matchedName;
+
+            layer.on("mouseover", () => {
+              if (selectedCountry !== matchedName) {
+                layer.setStyle(highlightStyle());
+              }
+              layer.bindTooltip(feature.properties.name, {
+                sticky: true, className: "country-tooltip"
+              }).openTooltip();
+            });
+
+            layer.on("mouseout", () => {
+              if (selectedCountry !== matchedName) {
+                layer.setStyle(defaultStyle());
+              }
+              layer.closeTooltip();
+            });
+
+            layer.on("click", () => {
+              if (matchedName) {
+                selectCountryByName(matchedName);
+              }
+            });
+          },
+        }).addTo(map);
+      });
+  }
+
+  // ── API Calls ───────────────────────────────────────────────────────────
+  async function fetchCountries() {
+    const res = await fetch("api/countries");
+    const data = await res.json();
+    countries = data.countries;
+  }
+
+  async function fetchNextImage() {
+    clearSelection();
+    $id("game-image").style.display = "none";
+    $id("img-loading").style.display = "block";
+
+    const res = await fetch(`api/next-image?username=${encodeURIComponent(username)}`);
+
+    if (res.status === 204) {
+      // All images done
+      await showDoneScreen();
+      return;
+    }
+
+    const data = await res.json();
+    currentImageId = data.image_id;
+
+    // Update progress
+    $id("hdr-score").textContent =
+      `${data.user_completed}/${data.total_images}`;
+
+    // Load image
+    const img = $id("game-image");
+    img.onload = () => {
+      $id("img-loading").style.display = "none";
+      img.style.display = "block";
+    };
+    img.src = data.image_url;
+  }
+
+  async function submitGuess() {
+    if (!selectedCountry || !currentImageId) return;
+
+    $id("submit-btn").disabled = true;
+
+    const res = await fetch("api/submit-guess", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: username,
+        image_id: currentImageId,
+        country: selectedCountry,
+      }),
+    });
+
+    const data = await res.json();
+    showResult(data);
+  }
+
+  function showResult(data) {
+    const bothCorrect = data.human_correct && data.model_correct;
+    const humanOnly = data.human_correct && !data.model_correct;
+    const modelOnly = !data.human_correct && data.model_correct;
+    const neitherCorrect = !data.human_correct && !data.model_correct;
+
+    let title = "";
+    if (humanOnly) title = "You beat the model!";
+    else if (data.human_correct && data.model_correct) title = "Both correct!";
+    else if (modelOnly) title = "Model got it, you didn't";
+    else title = "Neither got it";
+
+    $id("result-title").textContent = title;
+    $id("result-correct").textContent = getDisplayName(data.correct_country);
+
+    const humanEl = $id("result-human");
+    humanEl.textContent = `${getDisplayName(data.human_guess)} ${data.human_correct ? "✓" : "✗"}`;
+    humanEl.className = `value ${data.human_correct ? "correct" : "incorrect"}`;
+
+    const modelEl = $id("result-model");
+    modelEl.textContent = `${getDisplayName(data.model_guess)} ${data.model_correct ? "✓" : "✗"}`;
+    modelEl.className = `value ${data.model_correct ? "correct" : "incorrect"}`;
+
+    const stats = data.user_stats;
+    $id("result-stats-text").textContent =
+      `${stats.correct}/${stats.total} (${stats.accuracy}%)`;
+    $id("hdr-accuracy").textContent = `${stats.accuracy}%`;
+    $id("hdr-score").textContent = `${stats.correct}/${stats.total}`;
+
+    resultOverlay.classList.add("visible");
+  }
+
+  async function showDoneScreen() {
+    showScreen(doneScreen);
+    const res = await fetch("api/stats");
+    const data = await res.json();
+
+    let html = "<table><thead><tr><th>Player</th><th>Correct</th><th>Total</th><th>Accuracy</th></tr></thead><tbody>";
+
+    // Add model row
+    html += `<tr class="model-row"><td>Model (AI)</td><td>${data.model.correct}</td><td>${data.model.total}</td><td>${data.model.accuracy}%</td></tr>`;
+
+    // Add human rows
+    data.users.forEach(u => {
+      const isMe = u.username === username;
+      html += `<tr${isMe ? ' style="font-weight:700"' : ""}><td>${u.username}</td><td>${u.correct}</td><td>${u.total}</td><td>${u.accuracy}%</td></tr>`;
+    });
+
+    html += "</tbody></table>";
+    $id("leaderboard").innerHTML = html;
+  }
+
+  // ── Event Handlers ──────────────────────────────────────────────────────
+  const usernameInput = $id("username-input");
+  const startBtn = $id("start-btn");
+
+  usernameInput.addEventListener("input", () => {
+    startBtn.disabled = !usernameInput.value.trim();
+  });
+
+  usernameInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !startBtn.disabled) startBtn.click();
+  });
+
+  startBtn.addEventListener("click", async () => {
+    username = usernameInput.value.trim();
+    if (!username) return;
+
+    await fetchCountries();
+    showScreen(gameScreen);
+    $id("hdr-username").textContent = username;
+    initMap();
+
+    // Small delay so map renders before loading image
+    setTimeout(() => {
+      map.invalidateSize();
+      fetchNextImage();
+    }, 200);
+  });
+
+  $id("submit-btn").addEventListener("click", submitGuess);
+
+  $id("next-btn").addEventListener("click", () => {
+    resultOverlay.classList.remove("visible");
+    fetchNextImage();
+  });
+
+})();
+</script>
+</body>
+</html>

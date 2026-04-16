@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GeoGuess — Training Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+# This file is read by the training notebook at startup. Edit values here
+# instead of modifying notebook cells directly. To run an experiment with
+# different settings, copy this file (e.g. training_exp02.yaml) and pass
+# the path in the notebook's CONFIG_PATH variable.
+#
+# All sample sizes can be scaled freely. The only constraint is:
+#   train_samples + val_samples <= (available images from n_shards)
+# The notebook validates this at runtime and raises an error if violated.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Task ──────────────────────────────────────────────────────────────────────
+task_mode: country          # "country" (classification) or "coordinates" (H3 regression)
+
+# ── Data ──────────────────────────────────────────────────────────────────────
+data:
+  n_shards: 10              # Train shards to download (1–98). Each ≈ 50K images.
+                             # 5 shards ≈ 250K available; 10 ≈ 500K; 98 = full dataset.
+  train_samples: 500000      # Images sampled from official train split
+  val_samples: 15000         # Validation images (carved from train split only)
+  test_samples: 5000         # Images sampled from official test split
+  min_images_per_class: 20   # Drop classes with fewer training images than this
+  max_countries: null         # Limit class count for debugging (null = use all)
+
+# ── Data Isolation ────────────────────────────────────────────────────────────
+# The webapp's test images are drawn from the official OSV-5M *test* split,
+# which is entirely separate from the train split at the HuggingFace level.
+# This means webapp images can never appear in training data regardless of
+# how many shards you download.
+#
+# The webapp_holdout_ids file (generated during data prep) lists the exact
+# image IDs reserved for the webapp. The training notebook's test evaluation
+# excludes these IDs so that model accuracy is measured on a fully independent
+# set — not the same images users see in the game.
+webapp_holdout_ids: configs/webapp_holdout_ids.json
+
+# ── Model ─────────────────────────────────────────────────────────────────────
+model:
+  architecture: efficientnet_b0    # Any timm model name (e.g. efficientnet_b4, convnext_small)
+  image_size: 224                  # Input resolution (match architecture's expected size)
+  pretrained: true                 # Use ImageNet pretrained weights
+
+# ── Training ──────────────────────────────────────────────────────────────────
+training:
+  batch_size: 32
+  epochs: 6                  # A100: 6 epochs ≈ 1.5–2 hrs on 500K images
+  learning_rate: 0.0003      # 3e-4; AdamW default
+  weight_decay: 0.0001
+  patience: 3                # Early stopping: stop after N epochs without val improvement
+  num_workers: 2             # DataLoader workers. Set to 0 if you see broken-pipe errors.
+  seed: 42
+
+# ── Coordinates Mode (only used when task_mode: coordinates) ─────────────────
+coordinates:
+  h3_resolution: 3           # H3 grid resolution (3 ≈ 12 km hex edge; 2 ≈ 86 km)
+  cumulative_threshold: 0.70 # Weighted centroid: collect cells until this probability mass
+  outlier_distance_km: 2000  # Geographic coherence: drop candidates farther than this
+
+# ── I/O ───────────────────────────────────────────────────────────────────────
+io:
+  output_dir: /content/osv5m_outputs
+  use_drive: true            # Mount Google Drive and copy artifacts there
+  drive_output_dir: /content/drive/MyDrive/osv5m_outputs
+
+# ── Webapp Data Prep (used by the data prep section at end of notebook) ──────
+webapp_prep:
+  n_images: 1000             # Number of test images to sample for the webapp
+  seed: 42                   # Sampling seed (deterministic selection)
+  jpeg_quality: 85           # JPEG compression quality for saved webapp images
+  output_dir: webapp/data    # Relative to Colab working directory

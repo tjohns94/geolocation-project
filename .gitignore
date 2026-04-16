@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment
+.env
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Auto-generated webapp data (recreated on each run)
+webapp/data/
+webapp_points/data/
+
+# IDE
+.vscode/
+.idea/
+
+# Data artifacts (large files tracked by Git LFS)
+# Uncomment these if NOT using Git LFS:
+# data/best_model.pt
+# data/original1000.zip

@@ -1,0 +1,18 @@
+{
+  "task_mode": "country",
+  "model_name": "efficientnet_b0",
+  "num_classes": 180,
+  "image_size": 224,
+  "batch_size": 32,
+  "epochs_run": 6,
+  "best_epoch": 6,
+  "best_val_top1": 0.7501333333333333,
+  "lr": 0.0003,
+  "weight_decay": 0.0001,
+  "train_samples": 484799,
+  "val_samples": 15000,
+  "test_samples": 5000,
+  "seed": 42,
+  "h3_resolution": null,
+  "min_images_per_class": 20
+}

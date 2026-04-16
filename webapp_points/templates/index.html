@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GeoGuess 5000 — Human vs. Model</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface-hover: #252836;
+  --border: #2e3140;
+  --text: #e4e4e7;
+  --text-muted: #9ca3af;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --correct: #22c55e;
+  --incorrect: #ef4444;
+  --model: #f59e0b;
+  --radius: 10px;
+  --font: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ── Screens ──────────────────────────────────────────────────────────────── */
+.screen { display: none; }
+.screen.active { display: flex; }
+
+/* ── Login Screen ─────────────────────────────────────────────────────────── */
+#login-screen {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 24px;
+  padding: 24px;
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 440px;
+  width: 100%;
+  text-align: center;
+}
+
+.login-card h1 {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-card p {
+  color: var(--text-muted);
+  margin-bottom: 32px;
+  line-height: 1.5;
+  font-size: 15px;
+}
+
+.input-group {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 16px;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input-group input:focus {
+  border-color: var(--accent);
+}
+
+.input-group input::placeholder { color: var(--text-muted); }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 28px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 16px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: all 0.2s;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  width: 100%;
+}
+
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Game Screen ──────────────────────────────────────────────────────────── */
+#game-screen {
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.game-header .logo {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-hover);
+}
+
+.stats-bar {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+}
+
+.stats-bar .stat {
+  color: var(--text-muted);
+}
+
+.stats-bar .stat strong {
+  color: var(--text);
+}
+
+.game-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left: Image */
+.image-panel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.image-panel img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.image-panel .loading-spinner {
+  position: absolute;
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
+/* Right: Controls */
+.controls-panel {
+  width: 480px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+
+.info-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.info-section strong { color: var(--text); }
+
+/* Map */
+.map-section {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Guess display */
+.guess-display {
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.guess-display.active { color: var(--text); }
+.guess-display strong { color: var(--accent); }
+
+/* Submit bar */
+.submit-bar {
+  padding: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.submit-bar .btn { width: 100%; }
+
+/* ── Result Overlay ───────────────────────────────────────────────────────── */
+.result-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.result-overlay.visible { display: flex; }
+
+.result-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+}
+
+.result-score {
+  font-size: 48px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.result-score.high { color: var(--correct); }
+.result-score.medium { color: #eab308; }
+.result-score.low { color: var(--incorrect); }
+
+.result-distance {
+  color: var(--text-muted);
+  font-size: 15px;
+  margin-bottom: 28px;
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.result-row .label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.result-row .value { font-weight: 600; }
+
+.result-stats {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.result-stats strong { color: var(--text); }
+
+.result-card .btn {
+  margin-top: 24px;
+  width: 100%;
+}
+
+/* ── Done Screen ──────────────────────────────────────────────────────────── */
+#done-screen {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 24px;
+  padding: 24px;
+}
+
+.done-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 40px;
+  max-width: 600px;
+  width: 100%;
+  text-align: center;
+}
+
+.done-card h2 { font-size: 28px; margin-bottom: 16px; }
+.done-card p { color: var(--text-muted); line-height: 1.6; margin-bottom: 24px; }
+
+.leaderboard {
+  margin-top: 24px;
+  text-align: left;
+}
+
+.leaderboard table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.leaderboard th, .leaderboard td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.leaderboard th {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.leaderboard tr.model-row { color: var(--model); }
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Leaflet overrides ────────────────────────────────────────────────────── */
+.leaflet-container { background: var(--bg) !important; }
+
+/* Mini map for result */
+.result-map {
+  width: 100%;
+  height: 200px;
+  margin: 20px 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+</style>
+</head>
+<body>
+
+<!-- ════════ LOGIN SCREEN ════════ -->
+<div id="login-screen" class="screen active">
+  <div class="login-card">
+    <h1>GeoGuess 5000</h1>
+    <p>Can you beat the model? View street-view photos and click the map to guess the location.
+       Your points will be compared against our geolocation AI.</p>
+    <div class="input-group">
+      <input type="text" id="username-input" placeholder="Enter your name"
+             autocomplete="off" maxlength="40">
+    </div>
+    <button class="btn btn-primary" id="start-btn" disabled>Start Guessing</button>
+  </div>
+</div>
+
+<!-- ════════ GAME SCREEN ════════ -->
+<div id="game-screen" class="screen">
+  <div class="game-header">
+    <div class="logo">GeoGuess 5000</div>
+    <div class="stats-bar">
+      <div class="stat">Player: <strong id="hdr-username"></strong></div>
+      <div class="stat">Progress: <strong id="hdr-progress">0/0</strong></div>
+      <div class="stat">Avg Score: <strong id="hdr-avg-score">—</strong></div>
+    </div>
+  </div>
+  <div class="game-body">
+    <div class="image-panel">
+      <span class="loading-spinner" id="img-loading">Loading image...</span>
+      <img id="game-image" alt="Street view" style="display:none;" />
+    </div>
+    <div class="controls-panel">
+      <div class="info-section">
+        Click the map to place your guess marker. The score is calculated based on distance from the true location.
+      </div>
+      <div class="map-section">
+        <div id="map"></div>
+      </div>
+      <div class="guess-display" id="guess-display">
+        Marker not placed yet
+      </div>
+      <div class="submit-bar">
+        <button class="btn btn-primary" id="submit-btn" disabled>Submit Guess</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ RESULT OVERLAY ════════ -->
+<div class="result-overlay" id="result-overlay">
+  <div class="result-card">
+    <div class="result-score" id="result-score">5000</div>
+    <p class="result-distance">
+      Distance: <strong id="result-distance">0 km</strong>
+    </p>
+    <div class="result-row">
+      <span class="label">Your guess</span>
+      <span class="value" id="result-human-coords">—</span>
+    </div>
+    <div class="result-row">
+      <span class="label">True location</span>
+      <span class="value" id="result-true-coords">—</span>
+    </div>
+    <div class="result-row">
+      <span class="label">Model's score</span>
+      <span class="value" id="result-model-score">—</span>
+    </div>
+    <div class="result-stats">
+      Your average score: <strong id="result-avg-score">—</strong>
+    </div>
+    <button class="btn btn-primary" id="next-btn">Next Image</button>
+  </div>
+</div>
+
+<!-- ════════ DONE SCREEN ════════ -->
+<div id="done-screen" class="screen">
+  <div class="done-card">
+    <h2>All Done!</h2>
+    <p>You've guessed every available image. Thanks for participating!</p>
+    <div class="leaderboard" id="leaderboard"></div>
+  </div>
+</div>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────── -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function() {
+  "use strict";
+
+  // ── State ───────────────────────────────────────────────────────────────
+  let username = "";
+  let currentImageId = null;
+  let guessMarker = null;     // Leaflet marker for user's guess
+  let trueMarker = null;      // Leaflet marker for true location
+  let map = null;
+  let currentGuessLat = null;
+  let currentGuessLon = null;
+
+  // ── DOM references ──────────────────────────────────────────────────────
+  const $id = id => document.getElementById(id);
+  const loginScreen = $id("login-screen");
+  const gameScreen  = $id("game-screen");
+  const doneScreen  = $id("done-screen");
+  const resultOverlay = $id("result-overlay");
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+  function showScreen(screen) {
+    [loginScreen, gameScreen, doneScreen].forEach(s => s.classList.remove("active"));
+    screen.classList.add("active");
+  }
+
+  function updateGuessDisplay() {
+    const display = $id("guess-display");
+    if (currentGuessLat !== null && currentGuessLon !== null) {
+      display.innerHTML = `Marker placed: <strong>${currentGuessLat.toFixed(4)}°, ${currentGuessLon.toFixed(4)}°</strong>`;
+      display.classList.add("active");
+      $id("submit-btn").disabled = false;
+    } else {
+      display.textContent = "Marker not placed yet";
+      display.classList.remove("active");
+      $id("submit-btn").disabled = true;
+    }
+  }
+
+  function getScoreColor(score) {
+    if (score >= 4000) return "high";
+    if (score >= 1000) return "medium";
+    return "low";
+  }
+
+  // ── Map Setup ───────────────────────────────────────────────────────────
+  function initMap() {
+    map = L.map("map", {
+      center: [20, 0],
+      zoom: 2,
+      minZoom: 2,
+      maxZoom: 8,
+      zoomControl: true,
+      attributionControl: false,
+      worldCopyJump: true,
+    });
+
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png", {
+      subdomains: "abcd",
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Click to place guess marker
+    map.on("click", function(e) {
+      const lat = e.latlng.lat;
+      const lon = e.latlng.lng;
+
+      currentGuessLat = lat;
+      currentGuessLon = lon;
+
+      // Remove old marker if exists
+      if (guessMarker) {
+        map.removeLayer(guessMarker);
+      }
+
+      // Add new marker
+      guessMarker = L.circleMarker([lat, lon], {
+        radius: 8,
+        fillColor: "#ef4444",
+        color: "#fff",
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8
+      }).addTo(map).bindPopup(`Your guess<br>${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
+
+      updateGuessDisplay();
+    });
+  }
+
+  // ── API Calls ───────────────────────────────────────────────────────────
+  async function fetchNextImage() {
+    currentGuessLat = null;
+    currentGuessLon = null;
+    updateGuessDisplay();
+
+    $id("game-image").style.display = "none";
+    $id("img-loading").style.display = "block";
+
+    if (guessMarker) {
+      map.removeLayer(guessMarker);
+      guessMarker = null;
+    }
+    if (trueMarker) {
+      map.removeLayer(trueMarker);
+      trueMarker = null;
+    }
+
+    const res = await fetch(`api/next-image?username=${encodeURIComponent(username)}`);
+
+    if (res.status === 204) {
+      // All images done
+      await showDoneScreen();
+      return;
+    }
+
+    const data = await res.json();
+    currentImageId = data.image_id;
+
+    // Update progress
+    $id("hdr-progress").textContent =
+      `${data.user_completed}/${data.total_images}`;
+
+    // Load image
+    const img = $id("game-image");
+    img.onload = () => {
+      $id("img-loading").style.display = "none";
+      img.style.display = "block";
+    };
+    img.src = data.image_url;
+  }
+
+  async function submitGuess() {
+    if (currentGuessLat === null || currentGuessLon === null || !currentImageId) return;
+
+    $id("submit-btn").disabled = true;
+
+    const res = await fetch("api/submit-guess", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: username,
+        image_id: currentImageId,
+        lat: currentGuessLat,
+        lon: currentGuessLon,
+      }),
+    });
+
+    const data = await res.json();
+    showResult(data);
+  }
+
+  function showResult(data) {
+    const score = data.score;
+    const distance = data.distance_km;
+    const color = getScoreColor(score);
+
+    $id("result-score").textContent = score;
+    $id("result-score").className = `result-score ${color}`;
+    $id("result-distance").textContent = `${distance} km`;
+    $id("result-human-coords").textContent =
+      `${currentGuessLat.toFixed(4)}°, ${currentGuessLon.toFixed(4)}°`;
+    $id("result-true-coords").textContent =
+      `${data.true_lat.toFixed(4)}°, ${data.true_lon.toFixed(4)}°`;
+    $id("result-model-score").textContent = `${data.model_score} pts`;
+    $id("result-avg-score").textContent =
+      `${data.stats.mean_score} pts (${data.stats.total} guesses)`;
+
+    resultOverlay.classList.add("visible");
+  }
+
+  async function showDoneScreen() {
+    showScreen(doneScreen);
+
+    const res = await fetch("api/stats");
+    const stats = await res.json();
+
+    // Build leaderboard
+    const rows = [];
+    for (const user of stats.users) {
+      rows.push(`
+        <tr>
+          <td>${user.username}</td>
+          <td>${user.total}</td>
+          <td>${user.sum_score}</td>
+          <td>${user.mean_score}</td>
+        </tr>
+      `);
+    }
+
+    // Add model row
+    rows.push(`
+      <tr class="model-row">
+        <td>Model (AI)</td>
+        <td>${stats.model.total}</td>
+        <td>${stats.model.sum_score}</td>
+        <td>${stats.model.mean_score}</td>
+      </tr>
+    `);
+
+    $id("leaderboard").innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Guesses</th>
+            <th>Total Score</th>
+            <th>Avg Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  // ── Event Listeners ─────────────────────────────────────────────────────
+  $id("username-input").addEventListener("input", function() {
+    const valid = this.value.trim().length > 0;
+    $id("start-btn").disabled = !valid;
+  });
+
+  $id("start-btn").addEventListener("click", async function() {
+    const input = $id("username-input").value.trim();
+    if (!input) return;
+
+    username = input;
+    $id("hdr-username").textContent = username;
+
+    showScreen(gameScreen);
+    initMap();
+    await fetchNextImage();
+  });
+
+  $id("submit-btn").addEventListener("click", submitGuess);
+
+  $id("next-btn").addEventListener("click", async function() {
+    resultOverlay.classList.remove("visible");
+    await fetchNextImage();
+  });
+
+  // ── Initialization ──────────────────────────────────────────────────────
+  console.log("GeoGuess 5000 loaded");
+})();
+</script>
+</body>
+</html>
