@@ -1,0 +1,28 @@
+# GeoGuess runtime dependencies.
+# Pinned to the versions the training and evaluation runs were validated against.
+# The notebook itself adds HuggingFace deps (datasets, transformers, huggingface_hub)
+# only in evaluate/train modes — see MODEL_CARD.md for the full training environment.
+
+# ── Webapp (Flask) ───────────────────────────────────────────────────────────
+Flask==3.0.3
+
+# ── Notebook analysis (analysis_only mode) ───────────────────────────────────
+numpy==1.26.4
+pandas==2.2.2
+matplotlib==3.8.4
+seaborn==0.13.2
+scipy==1.13.1
+
+# ── Training / evaluate modes (GPU; install on top of the above) ─────────────
+# torch==2.3.1
+# torchvision==0.18.1
+# timm==1.0.7
+# datasets==2.20.0
+# huggingface_hub==0.23.4
+# PyYAML==6.0.1
+# Pillow==10.3.0
+# h3==3.7.7
+
+# ── Dev (optional) ───────────────────────────────────────────────────────────
+# black==24.4.2
+# ruff==0.5.0

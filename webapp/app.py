@@ -151,7 +151,11 @@ def load_manifest() -> None:
     """Load the image manifest and country list from disk."""
     global _manifest, _country_list
     if not MANIFEST_PATH.exists():
-        print(f"WARNING: {MANIFEST_PATH} not found. Run prepare_data.py first.")
+        print(
+            f"WARNING: {MANIFEST_PATH} not found. "
+            "auto_setup() should have generated it from ../data/experiment_data.json — "
+            "check that the repo is intact."
+        )
         return
     with open(MANIFEST_PATH) as f:
         raw = json.load(f)
@@ -461,6 +465,12 @@ def api_export() -> Response:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    auto_setup()
+    load_manifest()
+    app.run(host="0.0.0.0", port=5000, debug=True)
+else:
+    auto_setup()
+    load_manifest()
     auto_setup()
     load_manifest()
     app.run(host="0.0.0.0", port=5000, debug=True)
